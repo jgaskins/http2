@@ -1,4 +1,5 @@
-module HTTP2
+module HTTP
+  # :nodoc:
   class SliceReader
     getter offset : Int32
     getter bytes : Bytes

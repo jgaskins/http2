@@ -1,4 +1,4 @@
-module HTTP2
+module HTTP
   module HPACK
     class DynamicTable
       getter bytesize : Int32

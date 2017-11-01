@@ -7,14 +7,14 @@
 #
 # Example:
 # ```
-# io = IO::CircularBuffer.new(32)
+# io = HTTP::CircularBuffer.new(32)
 #
 # io.write(UInt8.slice(1, 2, 3, 4, 5))
 # p io.size # => 5
 #
-# io.close(IO::CircularBuffer::Closed::Write)
-# p io.closed?(IO::CircularBuffer::Closed::Write) # => true
-# p io.closed?(IO::CircularBuffer::Closed::Read)  # => false
+# io.close(HTTP::CircularBuffer::Closed::Write)
+# p io.closed?(HTTP::CircularBuffer::Closed::Write) # => true
+# p io.closed?(HTTP::CircularBuffer::Closed::Read)  # => false
 #
 # bytes = Bytes.new(32)
 # io.read(bytes) # => 5
@@ -31,16 +31,16 @@
 # The following example will write 16 bytes then block until at least 8 bytes
 # are read from it:
 # ```
-# io = IO::CircularBuffer.new(16)
+# io = HTTP::CircularBuffer.new(16)
 # io.write(Bytes.new(24))
 # ```
 #
 # This will block until at least 1 byte is written:
 # ```
-# io = IO::CircularBuffer.new(16)
+# io = HTTP::CircularBuffer.new(16)
 # io.read(Bytes.new(8))
 # ```
-class IO::CircularBuffer
+class HTTP::CircularBuffer
   include IO
 
   @[Flags]

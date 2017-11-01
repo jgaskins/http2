@@ -1,7 +1,7 @@
 require "./request"
 require "./response"
 
-module HTTP2
+module HTTP
   class Server
     class Context
       getter request : Request

@@ -3,9 +3,9 @@ require "logger"
 require "./config"
 require "./errors"
 require "./frame"
-require "./hpack"
 require "./settings"
 require "./streams"
+require "../hpack"
 
 class Logger::Dummy < Logger
   def initialize
@@ -48,8 +48,8 @@ module HTTP2
     # Settings of remote peer. Updated whenever a SETTINGS frame is received.
     getter remote_settings : Settings
 
-    protected getter hpack_encoder : HPACK::Encoder
-    protected getter hpack_decoder : HPACK::Decoder
+    protected getter hpack_encoder : HTTP::HPACK::Encoder
+    protected getter hpack_decoder : HTTP::HPACK::Decoder
     private getter io : IO
 
     @logger : Logger?
@@ -60,12 +60,12 @@ module HTTP2
       @channel = Channel::Buffered(Frame | Array(Frame) | Nil).new
       @closed = false
 
-      @hpack_encoder = HPACK::Encoder.new(
+      @hpack_encoder = HTTP::HPACK::Encoder.new(
         max_table_size: local_settings.header_table_size,
-        indexing: HPACK::Indexing::NONE,
+        indexing: HTTP::HPACK::Indexing::NONE,
         huffman: true
       )
-      @hpack_decoder = HPACK::Decoder.new(
+      @hpack_decoder = HTTP::HPACK::Decoder.new(
         max_table_size: remote_settings.header_table_size
       )
 
@@ -304,7 +304,7 @@ module HTTP2
               validate_response_headers(stream.headers)
             end
           end
-        rescue ex : HPACK::Error
+        rescue ex : HTTP::HPACK::Error
           logger.debug { "HPACK::Error: #{ex.message}" }
           raise Error.compression_error
         end
@@ -368,8 +368,8 @@ module HTTP2
       end
     end
 
-    # OPTIMIZE: consider IO::CircularBuffer and decompressing HPACK headers
-    # in-parallel instead of reallocating pointers and eventually
+    # OPTIMIZE: consider CircularBuffer and decompressing HPACK headers
+    # in parallel instead of reallocating pointers and eventually
     # decompressing everything
     private def read_headers_payload(frame, size)
       stream = frame.stream

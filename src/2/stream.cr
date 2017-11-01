@@ -1,4 +1,4 @@
-require "http/headers"
+require "../headers"
 require "./data"
 
 module HTTP2

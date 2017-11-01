@@ -1,10 +1,10 @@
-require "http/headers"
+require "../headers"
 require "./huffman"
 require "./static_table"
 require "./dynamic_table"
 require "../slice_reader"
 
-module HTTP2
+module HTTP
   module HPACK
     @[Flags]
     enum Indexing : UInt8

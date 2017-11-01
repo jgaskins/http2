@@ -1,9 +1,9 @@
 require "./src/server"
 
 class EchoHandler
-  include HTTP2::Server::Handler
+  include HTTP::Server::Handler
 
-  def call(context : HTTP2::Server::Context)
+  def call(context : HTTP::Server::Context)
     request, response = context.request, context.response
 
     case request.method
@@ -35,9 +35,9 @@ class EchoHandler
 end
 
 class NotFoundHandler
-  include HTTP2::Server::Handler
+  include HTTP::Server::Handler
 
-  def call(context : HTTP2::Server::Context)
+  def call(context : HTTP::Server::Context)
     response = context.response
     response.status = 404
     response.headers["server"] = "h2/0.0.0"
@@ -64,7 +64,7 @@ handlers = [
   EchoHandler.new,
   NotFoundHandler.new,
 ]
-server = HTTP2::Server.new(host, port, ssl_context, logger)
+server = HTTP::Server.new(host, port, ssl_context, logger)
 
 if ssl_context
   puts "listening on https://#{host}:#{port}/"

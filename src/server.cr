@@ -1,15 +1,13 @@
 require "base64"
-require "flate"
-require "gzip"
 #require "io/hexdump"
 require "logger"
 require "openssl"
-require "./connection"
+require "./1/connection"
+require "./2/connection"
 require "./server/handler"
-require "./server/http1"
 require "./server/context"
 
-module HTTP2
+module HTTP
   class Server
     @handler : Handler?
     @logger : Logger
@@ -64,7 +62,7 @@ module HTTP2
             return bad_request(io)
           end
 
-          body = decode_body(connection.content(headers), headers)
+          body = HTTP.decode_body(connection.content(headers), headers)
           request = Request.new(headers, body, connection.version)
 
           if settings = http2_upgrade?(headers)
@@ -107,28 +105,8 @@ module HTTP2
       end
     end
 
-    private def decode_body(body, headers)
-      return unless body
-
-      case headers["Content-Encoding"]?
-      when "gzip"
-        body = Gzip::Reader.new(body, sync_close: true)
-      when "deflate"
-        body = Flate::Reader.new(body, sync_close: true)
-      end
-
-      if charset = HTTP.content_type_and_charset(headers).charset
-        body.set_encoding(charset, invalid: :skip)
-      end
-
-      body
-    end
-
     private def bad_request(io) : Nil
       io << "HTTP/1.1 400 BAD REQUEST\r\nConnection: close\r\n\r\n"
-    end
-
-    private def handle_http1_connection(connection, method, path)
     end
 
     private def http2_upgrade?(headers)
@@ -138,7 +116,7 @@ module HTTP2
     end
 
     private def handle_http2_connection(io, request = nil, settings = nil, alpn = nil) : Nil
-      connection = Connection.new(io, Connection::Type::SERVER, @logger)
+      connection = HTTP2::Connection.new(io, HTTP2::Connection::Type::SERVER, @logger)
 
       if settings
         # HTTP/1 => HTTP/2 upgrade: we got settings
@@ -151,8 +129,8 @@ module HTTP2
       connection.write_settings
 
       frame = connection.receive
-      unless frame.try(&.type) == Frame::Type::SETTINGS
-        raise Error.protocol_error("Expected SETTINGS frame")
+      unless frame.try(&.type) == HTTP2::Frame::Type::SETTINGS
+        raise HTTP2::Error.protocol_error("Expected SETTINGS frame")
       end
 
       if request
@@ -168,14 +146,14 @@ module HTTP2
         end
 
         case frame.type
-        when Frame::Type::HEADERS
+        when HTTP2::Frame::Type::HEADERS
           # don't dispatch twice
           next if frame.stream.trailing_headers?
           context = context_for(frame.stream)
           spawn handle_request(context.as(Context))
-        when Frame::Type::PUSH_PROMISE
-          raise Error.protocol_error("Unexpected PUSH_PROMISE frame")
-        when Frame::Type::GOAWAY
+        when HTTP2::Frame::Type::PUSH_PROMISE
+          raise HTTP2::Error.protocol_error("Unexpected PUSH_PROMISE frame")
+        when HTTP2::Frame::Type::GOAWAY
           break
         end
       end
@@ -192,10 +170,10 @@ module HTTP2
       end
     end
 
-    private def context_for(stream : Stream, request = nil)
+    private def context_for(stream : HTTP2::Stream, request = nil)
       unless request
         if stream.state.open?
-          body = decode_body(stream.data, stream.headers)
+          body = HTTP.decode_body(stream.data, stream.headers)
         end
         request = Request.new(stream.headers, body, "HTTP/2.0")
       end

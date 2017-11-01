@@ -1,4 +1,4 @@
-require "./io/circular_buffer"
+require "../circular_buffer"
 
 module HTTP2
   # Wraps a circular buffer to buffer incoming DATA. The buffer capacity is the
@@ -9,10 +9,10 @@ module HTTP2
     include IO
 
     # :nodoc:
-    alias Closed = IO::CircularBuffer::Closed
+    alias Closed = HTTP::CircularBuffer::Closed
 
     @stream : Stream
-    @buffer : IO::CircularBuffer?
+    @buffer : HTTP::CircularBuffer?
     @inbound_window_size : Int32
     @size : Int32
 
@@ -25,7 +25,7 @@ module HTTP2
     # Initializes buffer on demand.
     private def buffer
       # NOTE: thread safety (?)
-      @buffer ||= IO::CircularBuffer.new(@inbound_window_size)
+      @buffer ||= HTTP::CircularBuffer.new(@inbound_window_size)
     end
 
     # Reads previously buffered DATA.

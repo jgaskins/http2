@@ -1,5 +1,7 @@
-require "http/common"
-require "http/content"
+require "./status"
+require "./content"
+require "../common"
+require "../headers"
 
 module HTTP1
   struct Connection
@@ -73,17 +75,17 @@ module HTTP1
     def content(headers : HTTP::Headers, mandatory = false) : IO?
       if content_length = headers["Content-Length"]?.try(&.to_u64)
         return if content_length == 0
-        HTTP::FixedLengthContent.new(@io, content_length)
+        FixedLengthContent.new(@io, content_length)
       elsif headers["Transfer-Encoding"]? == "chunked"
-        HTTP::ChunkedContent.new(@io)
+        ChunkedContent.new(@io)
       elsif mandatory
-        HTTP::UnknownLengthContent.new(@io)
+        UnknownLengthContent.new(@io)
       end
     end
 
     def send_headers(headers : HTTP::Headers)
       status = headers[":status"]
-      message = HTTP.default_status_message_for(status.to_i)
+      message = HTTP1.default_status_message_for(status.to_i)
       @io << @version << ' ' << status << ' ' << message << "\r\n"
 
       headers.each do |name, values|

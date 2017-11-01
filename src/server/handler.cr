@@ -1,4 +1,4 @@
-module HTTP2
+module HTTP
   class Server
     module Handler
       # :nodoc:

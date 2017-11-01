@@ -1,4 +1,4 @@
-module HTTP2
+module HTTP
   class Server
     class Request
       @headers : HTTP::Headers
