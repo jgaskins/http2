@@ -2,9 +2,7 @@ require "./output"
 
 module HTTP
   class Server
-    class Response
-      include IO
-
+    class Response < IO
       getter headers : HTTP::Headers
       property output : IO
 

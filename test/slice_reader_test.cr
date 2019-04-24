@@ -1,7 +1,7 @@
 require "./test_helper"
 require "../src/slice_reader"
 
-module HTTP2
+module HTTP
   class SliceReaderTest < Minitest::Test
     def slice(*bytes)
       Slice(UInt8).new(bytes.size) { |i| bytes[i].to_u8 }

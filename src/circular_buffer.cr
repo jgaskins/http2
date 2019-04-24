@@ -40,9 +40,7 @@
 # io = HTTP::CircularBuffer.new(16)
 # io.read(Bytes.new(8))
 # ```
-class HTTP::CircularBuffer
-  include IO
-
+class HTTP::CircularBuffer < IO
   @[Flags]
   enum Closed
     Read

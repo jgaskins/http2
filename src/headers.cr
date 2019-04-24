@@ -1,287 +1,227 @@
-# A `Hash`-like object that holds HTTP headers.
-#
-# Two headers are considered the same if their downcase representation is the same
-# (in which `_` is the downcase version of `-`).
-struct HTTP::Headers
-  include Enumerable({String, Array(String)})
+module HTTP
+  # List of HTTP headers.
+  #
+  # In HTTP/1 header names were case insensitive; conventions used the
+  # Camel-Cased form (e.g. `Content-Type`). HTTP/2 settled to all lower-cased
+  # (e.g. `content-type`). This structure allows to access and set headers in a
+  # case_insensitive way to accomadate both versions, thought the lower-cased
+  # form should be preferred.
+  #
+  # Header names may appear multiple times with different values. For example
+  # cookies must each be declared with a distinct `set-cookie` header. This
+  # structure thus allows to access headers concatenated to a single string
+  # (each value separated by commas) with `#[]` or `#[]?` and access all values
+  # as an array with `#get` or `#get?` instead.
+  struct Headers
+    include Enumerable({String, Array(String)})
 
-  # :nodoc:
-  record Key, name : String do
-    forward_missing_to @name
+    # :nodoc:
+    struct Key
+      # TODO: consider always normalizing headers to the lower-cased form
 
-    def hash
-      h = 0
-      name.each_byte do |c|
-        c = normalize_byte(c)
-        h = 31 * h + c
+      protected getter name : String
+
+      def initialize(@name)
       end
-      h
+
+      def ==(other : String)
+        return false unless @name.bytesize == other.bytesize
+
+        a = @name.to_unsafe
+        b = other.to_unsafe
+
+        @name.bytesize.times do |i|
+          unless a[i] == b[i] || normalize_byte(a[i]) == normalize_byte(b[i])
+            return false
+          end
+        end
+
+        true
+      end
+
+      def ==(other : Key)
+        self == other.name
+      end
+
+      def hash(hasher)
+        @name.each_byte { |byte| hasher = normalize_byte(byte).hash(hasher) }
+        hasher
+      end
+
+      private def normalize_byte(byte)
+        if byte.unsafe_chr.ascii_uppercase?
+          byte + 32
+        else
+          byte
+        end
+      end
     end
 
-    def ==(key2)
-      key1 = name
-      key2 = key2.name
+    protected getter headers : Hash(Key, Array(String))
 
-      return false if key1.bytesize != key2.bytesize
+    def self.new
+      headers = {} of Key => Array(String)
+      new(headers)
+    end
 
-      cstr1 = key1.to_unsafe
-      cstr2 = key2.to_unsafe
+    # :nodoc:
+    protected def initialize(@headers)
+    end
 
-      key1.bytesize.times do |i|
-        next if cstr1[i] == cstr2[i] # Optimize the common case
+    def [](name : String) : String
+      self[name]? || raise KeyError.new
+    end
 
-        byte1 = normalize_byte(cstr1[i])
-        byte2 = normalize_byte(cstr2[i])
-
-        return false if byte1 != byte2
+    def []?(name : String) : String?
+      key = Key.new(name)
+      if values = @headers[key]?
+        concat(values)
       end
+    end
 
+    def []=(name : String, value : String)
+      key = Key.new(name)
+      if values = @headers[key]?
+        values.clear
+        values << value
+      else
+        @headers[key] = [value]
+      end
+      value
+    end
+
+    def []=(name : String, values : Array(String))
+      key = Key.new(name)
+      @headers[key] = values
+    end
+
+    def add(name : String, value : String) : Nil
+      key = Key.new(name)
+      if values = @headers[key]?
+        values << value
+      else
+        @headers[key] = [value]
+      end
+    end
+
+    def add(name : String, values : Array(String)) : Nil
+      key = Key.new(name)
+      if current = @headers[key]?
+        current.concat(values)
+      else
+        @headers[key] = values
+      end
+    end
+
+    def clear
+      @headers.clear
+    end
+
+    def clone
+      Headers.new(@headers.clone)
+    end
+
+    def dup
+      clone
+    end
+
+    def delete(name : String)
+      key = Key.new(name)
+      if values = @headers.delete(key)
+        concat(values)
+      end
+    end
+
+    def each
+      @headers.each do |key, value|
+        yield({key.name, value})
+      end
+    end
+
+    def empty?
+      @headers.empty?
+    end
+
+    def ==(other : Headers)
+      return false unless size == other.size
+      @headers.each do |key, values|
+        return false unless other_values = other.headers[key]?
+        return false unless other_values.size == values.size
+        return false unless values.all? { |value| other_values.includes?(value) }
+      end
       true
     end
 
-    private def normalize_byte(byte)
-      char = byte.unsafe_chr
-
-      return byte if char.ascii_lowercase? || char == '-' # Optimize the common case
-      return byte + 32 if char.ascii_uppercase?
-      return '-'.ord if char == '_'
-
-      byte
-    end
-  end
-
-  def initialize
-    @hash = Hash(Key, Array(String)).new
-  end
-
-  def []=(key, value : String)
-    self[wrap(key)] = [value]
-  end
-
-  def []=(key, value : Array(String))
-    value.each { |val| check_invalid_header_content val }
-
-    @hash[wrap(key)] = value
-  end
-
-  def [](key)
-    fetch wrap(key)
-  end
-
-  def []?(key)
-    values = @hash[wrap(key)]?
-    values ? concat(values) : nil
-  end
-
-  # Returns if among the headers for *key* there is some that contains *word* as a value.
-  # The *word* is expected to match between word boundaries (i.e. non-alphanumeric chars).
-  #
-  # ```
-  # headers = HTTP::Headers{"Connection" => "keep-alive, Upgrade"}
-  # headers.includes_word?("Connection", "Upgrade") # => true
-  # ```
-  def includes_word?(key, word)
-    return false if word.empty?
-
-    word = word.downcase
-    # iterates over all header values avoiding the concatenation
-    get?(key).try &.each do |value|
-      value = value.downcase
-      offset = 0
-      while true
-        start = value.index(word, offset)
-        break unless start
-        offset = start + word.size
-
-        # check if the match is not surrounded by alphanumeric chars
-        next if start > 0 && value[start - 1].ascii_alphanumeric?
-        next if start + word.size < value.size && value[start + word.size].ascii_alphanumeric?
-        return true
-      end
+    def get(name : String)
+      @headers[Key.new(name)]
     end
 
-    false
-  end
-
-  def add(key, value : String)
-    check_invalid_header_content value
-
-    key = wrap(key)
-    existing = @hash[key]?
-    if existing
-      existing << value
-    else
-      @hash[key] = [value]
+    def get?(name : String)
+      @headers[Key.new(name)]?
     end
-    self
-  end
 
-  def add(key, value : Array(String))
-    value.each { |val| check_invalid_header_content val }
-
-    key = wrap(key)
-    existing = @hash[key]?
-    if existing
-      existing.concat value
-    else
-      @hash[key] = value
+    def has_key?(name : String)
+      @headers.has_key?(Key.new(name))
     end
-    self
-  end
 
-  def fetch(key)
-    values = @hash.fetch wrap(key)
-    concat values
-  end
-
-  def fetch(key, default)
-    fetch(wrap(key)) { default }
-  end
-
-  def fetch(key)
-    values = @hash[wrap(key)]?
-    values ? concat(values) : yield key
-  end
-
-  def has_key?(key)
-    @hash.has_key? wrap(key)
-  end
-
-  def empty?
-    @hash.empty?
-  end
-
-  def delete(key)
-    values = @hash.delete wrap(key)
-    values ? concat(values) : nil
-  end
-
-  def merge!(other)
-    other.each do |key, value|
-      self[wrap(key)] = value
-    end
-    self
-  end
-
-  def ==(other : self)
-    self == other.@hash
-  end
-
-  def ==(other : Hash)
-    return false unless @hash.size == other.size
-
-    other.each do |key, value|
-      this_value = @hash[wrap(key)]?
-      if this_value
-        case value
-        when String
-          return false unless this_value.size == 1 && this_value[0] == value
-        when Array(String)
-          return false unless this_value == value
+    def inspect(io : IO)
+      io << "HTTP::Headers{"
+      @headers.each_with_index do |(key, values), index|
+        io << ", " if index > 0
+        key.name.inspect(io)
+        io << " => "
+        if values.size == 1
+          values.first.inspect(io)
         else
-          false
+          values.inspect(io)
         end
-      else
-        return false unless value.nil?
       end
+      io << "}"
     end
 
-    true
-  end
-
-  def each
-    @hash.each do |key, value|
-      yield({key.name, value})
+    def merge!(other : Headers)
+      other.headers.each { |(key, name)| @headers[key] = name }
+      self
     end
-  end
 
-  def get(key)
-    @hash[wrap(key)]
-  end
-
-  def get?(key)
-    @hash[wrap(key)]?
-  end
-
-  def dup
-    dup = HTTP::Headers.new
-    @hash.each do |key, value|
-      dup.@hash[key] = value
-    end
-    dup
-  end
-
-  def clone
-    dup
-  end
-
-  def same?(other : HTTP::Headers)
-    object_id == other.object_id
-  end
-
-  def to_s(io : IO)
-    io << "HTTP::Headers{"
-    @hash.each_with_index do |(key, values), index|
-      io << ", " if index > 0
-      key.name.inspect(io)
-      io << " => "
-      if values.size == 1
-        values.first.inspect(io)
-      else
-        values.inspect(io)
-      end
-    end
-    io << "}"
-  end
-
-  def inspect(io : IO)
-    to_s(io)
-  end
-
-  def pretty_print(pp)
-    pp.list("HTTP::Headers{", @hash.keys.sort_by(&.name), "}") do |key|
-      pp.group do
-        key.name.pretty_print(pp)
-        pp.text " =>"
-        pp.nest do
-          pp.breakable
-          values = get(key)
-          if values.size == 1
-            values.first.pretty_print(pp)
-          else
-            values.pretty_print(pp)
+    def pretty_print(pp)
+      pp.list("HTTP::Headers{", @headers.keys.sort_by(&.name), "}") do |key|
+        pp.group do
+          key.name.pretty_print(pp)
+          pp.text " =>"
+          pp.nest do
+            pp.breakable
+            values = @headers[key]
+            if values.size == 1
+              values.first.pretty_print(pp)
+            else
+              values.pretty_print(pp)
+            end
           end
         end
       end
     end
-  end
 
-  forward_missing_to @hash
-
-  private def wrap(key)
-    key.is_a?(Key) ? key : Key.new(key)
-  end
-
-  private def concat(values)
-    case values.size
-    when 0
-      ""
-    when 1
-      values.first
-    else
-      values.join ","
+    def same?(other : Headers)
+      headers.object_id == other.headers.object_id
     end
-  end
 
-  private def check_invalid_header_content(value)
-    # According to RFC 7230, characters accepted as HTTP header
-    # are '\t', ' ', all US-ASCII printable characters and
-    # range from '\x80' to '\xff' (but the last is obsoleted.)
-    value.each_byte do |byte|
-      char = byte.unsafe_chr
-      next if char == '\t'
-      if char < ' ' || char > '\u{ff}' || char == '\u{7f}'
-        raise ArgumentError.new("Header content contains invalid character #{char.inspect}")
+    def size
+      @headers.size
+    end
+
+    def to_s(io : IO)
+      inspect(io)
+    end
+
+    private def concat(values)
+      case values.size
+      when 0
+        ""
+      when 1
+        values.first
+      else
+        values.join(", ")
       end
     end
   end

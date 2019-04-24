@@ -1,7 +1,7 @@
 require "../test_helper"
 require "../../src/hpack"
 
-module HTTP2::HPACK
+module HTTP::HPACK
   class EncoderTest < Minitest::Test
     def e
       @e ||= Encoder.new

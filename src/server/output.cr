@@ -1,7 +1,7 @@
 module HTTP
   class Server
     # :nodoc:
-    abstract class Output
+    abstract class Output < IO
       include IO::Buffered
 
       def unbuffered_read(bytes : Bytes)
