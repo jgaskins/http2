@@ -3,6 +3,7 @@ version: 0.1.0
 
 authors:
   - Julien Portalier <julien@portalier.com>
+  - Jamie Gaskins <jgaskins@hey.com>
 
 description: |
   HTTP/2 Protocol Implementation
@@ -15,5 +16,7 @@ development_dependencies:
 targets:
   server:
     main: server.cr
+
+crystal: "1.0.0"
 
 license: Apache-2.0
