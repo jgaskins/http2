@@ -4,7 +4,7 @@ port = ENV.fetch("PORT", "9292").to_i
 host = ENV.fetch("HOST", "::")
 tls = ENV.fetch("TLS", "false") == "true"
 
-server = HTTP::Server.new(host, port) do |context|
+server = HTTP::Server.new do |context|
   request, response = context.request, context.response
   authority = request.headers[":authority"]? || request.headers["Host"]?
 
@@ -28,15 +28,19 @@ server = HTTP::Server.new(host, port) do |context|
 end
 
 if ENV["CI"]?
-  server.logger = Logger::Dummy.new(File.open("/dev/null"))
-end
-
-if tls
-  tls_context = HTTP::Server.default_tls_context
-  tls_context.certificate_chain = File.join("ssl", "server.crt")
-  tls_context.private_key = File.join("ssl", "server.key")
-  server.tls = tls_context
+  # server.logger = Log.for("lol", level: :none)
 end
 
 puts "Listening on #{host}:#{port} tls=#{tls}"
-server.listen
+
+if tls
+  tls_context = OpenSSL::SSL::Context::Server.new # HTTP::Server.default_tls_context
+  tls_context.certificate_chain = File.join("ssl", "server.crt")
+  tls_context.private_key = File.join("ssl", "server.key")
+  # server.tls = tls_context
+  server.bind_tls host, port, tls_context
+  server.listen
+else
+  server.listen host, port
+end
+

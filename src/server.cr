@@ -1,6 +1,6 @@
 require "base64"
-require "flate"
-require "gzip"
+require "compress/deflate/deflate"
+require "compress/gzip/gzip"
 #require "io/hexdump"
 require "openssl"
 require "./connection"

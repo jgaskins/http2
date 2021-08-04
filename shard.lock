@@ -1,6 +1,6 @@
-version: 1.0
+version: 2.0
 shards:
   minitest:
-    github: ysbaddaden/minitest.cr
+    git: https://github.com/ysbaddaden/minitest.cr.git
     version: 0.5.1
 
